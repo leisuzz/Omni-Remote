@@ -1,0 +1,232 @@
+#include "stdafx.h"
+#include "Robot_Omni.hpp"
+ 
+//Timer Constants
+#define TIME_PERIOD 1 
+#define TIME_RESOLUTION 1 
+ 
+//Timer Vars
+TIMECAPS tc;
+UINT wTimerRes;
+LARGE_INTEGER freq;
+int dataIndex = 0;
+ 
+//global value for counter
+int i = 0;
+float xRef, yRef, zRef;
+double LTR = 0;
+double x_bf;
+double y_bf;
+double z_bf;
+double y_t = 190;
+ 
+double x_t[] = { 125, 128, 130, 135, 140, 145, 147, 150, 153, 155, 158, 158, 158, 156, 155, 154, 150, 148, 145, 140, 135, 130, 128, 125, 125, 122, 119, 117, 110, 115 };
+double z_t[] = { 183, 180, 178, 175, 170, 165, 163, 155, 152, 147, 143, 140, 135, 130, 125, 118, 110, 107, 100, 98 , 98 , 100, 105, 115, 120, 130, 145, 165, 175,180 };
+ 
+ 
+//Robot Data Structure
+const int memLength = 120000;
+ 
+struct robotData{
+    int index; //Index 
+    float xPos; //Current x Position
+    float yPos; //Current y Position
+    float zPos; //Current z Position
+    float xDes; //Desired x Position
+    float yDes; //Desired y Position
+    float zDes; //Desired z Position
+    float xForce;   //Force in x Direction
+    float yForce;   //Force in y Direction
+    float zForce;   //Force in z Direction
+};
+robotData * robot1;
+ 
+//Main Loop Function
+void CALLBACK mainloop(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2);
+ 
+//Robot Objects
+Omni Omni1;
+ 
+//Main
+using namespace std;
+int _tmain(int argc, _TCHAR* argv[])
+{
+    cout << "ECE 464 Lab 2" << endl << endl;
+    cout << "Allocating Memory" << endl << endl;
+    robot1 = new robotData[memLength]; // Allocate save data on the heap
+    cout << "Initalizing Robots" << endl;
+ 
+    //Try to Initalize Robots
+    if(Omni1.Init("PHANToM_M1"))
+    { //Init Succeeded
+ 
+        //Enable Robots
+        Omni::enableAll();
+ 
+        //Set up Multimedia Time Services
+        if (timeGetDevCaps(&tc, sizeof(TIMECAPS)) != TIMERR_NOERROR) 
+        {
+            return -1;
+        }
+        wTimerRes = min(max(tc.wPeriodMin, TIME_RESOLUTION), tc.wPeriodMax);
+        timeBeginPeriod(wTimerRes); 
+ 
+        //Start Main Loop
+        cout << "Starting Main Loop, Press 'q' to Stop" << endl;
+        MMRESULT timer = timeSetEvent(TIME_PERIOD, 0, mainloop, 0, TIME_PERIODIC);
+ 
+        //Check for Keyboard Press
+        char k1;
+        k1=_getch();
+        while (k1!='q') //While 'q' is not pressed
+        {
+            k1=_getch();
+        }
+ 
+        //Stop Main Loop
+        timeKillEvent(timer);
+        timeEndPeriod(wTimerRes);
+ 
+        //Disable Robots
+        Omni::disableAll();
+ 
+        //Uninitalize Robots
+        Omni1.Uninit();
+ 
+        //Save Data From Loop
+        ofstream DataFile;
+        DataFile.open("Data1_04.txt"); //File Save Location
+        for(int s = 0; s < min(memLength,dataIndex); s++)
+        {
+            DataFile   << 
+                robot1[s].index << '\t' <<
+                robot1[s].xPos << '\t' <<
+                robot1[s].yPos << '\t' <<
+                robot1[s].zPos << '\t' <<
+                robot1[s].xDes << '\t' <<
+                robot1[s].yDes << '\t' <<
+                robot1[s].zDes << '\t' <<
+                robot1[s].xForce << '\t' <<
+                robot1[s].yForce << '\t' <<
+                robot1[s].zForce << endl;
+        }
+    }else{//Init Failed
+        cout << "Failed to Initialize Robots" << endl;
+    }
+ 
+    cout << "Press Enter to Quit" << endl;
+    char hold[256];
+    gets_s(hold);
+    return 0;
+}
+ 
+//Main Loop For Control, Called Every 1ms (1000Hz)
+void CALLBACK mainloop(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2)
+{
+    double pos1[3], force1[3];
+ 
+    //Get Robot Postion
+    Omni1.getPos(pos1);
+ 
+    //Demo Control Loop
+    float tPeriod = 5000.0; // 5 sec.
+ 
+    
+ 
+    //****************************
+    //   Your Code Goes Here
+    //****************************
+ 
+    //define transformation matrix
+    double r_11 = -0.3657;
+    double r_12 = -0.7282;
+    double r_13 = 0.2459;
+    double r_21 = 0.0874;
+    double r_22 = 0.0498;
+    double r_23 = 1.0471;
+    double r_31 = -0.7109;
+    double r_32 = 0.2359;
+    double r_33 = -0.0229;
+    double lx = 127.4395;
+    double ly = -159.4123;
+    double lz = 59.8343;
+ 
+    //define reference
+    double x_r = -5.125;
+    double y_r = -18.6577;
+    double z_r = -8.61559;
+ 
+ 
+ 
+    // 30 points
+    //double x_t[30] = { 143, 138, 133, 132, 132, 132, 132, 133, 133, 135, 136, 139, 143, 149, 153, 157, 164, 168, 171, 173, 174, 174, 174, 173, 172, 170, 166, 162, 156, 149 };
+    //double z_t[30] = { 44, 46, 52, 59, 66, 73, 84, 93, 101, 110, 119, 126, 131, 135, 137, 137, 135, 129, 126, 122, 114, 105, 95, 88, 78, 70, 60, 53, 48, 45 };
+    
+    
+    double L = 140;
+ 
+    // base frame
+ 
+    x_bf = r_11*x_t[i] + r_12*y_t + r_13*z_t[i] + lx;
+    y_bf = r_21*x_t[i] + r_22*y_t + r_23*z_t[i] + ly;
+    z_bf = r_31*x_t[i] + r_32*y_t + r_33*z_t[i] + lz;
+    if (dataIndex % 1000 == 0){
+        i = i + 1;
+        if (i > 29){
+            i = 0;
+        }
+    }
+ 
+    //double x_bf = r_11*x_t[i] + r_12*y_t + r_13*z_t + lx;
+    //double y_bf = r_21*x_t + r_22*y_t + r_23*z_t + ly;
+    //double z_bf = r_31*x_t + r_32*y_t + r_33*z_t + lz;
+ 
+ 
+   
+    LTR = sqrt(pow((x_r - x_bf), 2) + pow((y_r - y_bf), 2) + pow((z_r - z_bf), 2));
+    
+    xRef = (((x_r - x_bf)*L) / LTR) + x_bf;
+    yRef = (((y_r - y_bf)*L) / LTR )+ y_bf;
+    zRef = (((z_r - z_bf)*L) / LTR )+ z_bf;
+ 
+ 
+    float gain = 0.4;
+    force1[0] = gain*(xRef - pos1[0]);
+    force1[1] = gain*(yRef - pos1[1]);
+    force1[2] = gain*(zRef - pos1[2]);
+ 
+    Omni1.setForce(force1);
+ 
+    //Save Robot Data Every Cycle
+    if(dataIndex < memLength){
+        robot1[dataIndex].index = dataIndex;
+        robot1[dataIndex].xPos = pos1[0];
+        robot1[dataIndex].yPos = pos1[1];
+        robot1[dataIndex].zPos = pos1[2];
+        robot1[dataIndex].xDes = xRef;
+        robot1[dataIndex].yDes = yRef;
+        robot1[dataIndex].zDes = zRef;
+        robot1[dataIndex].xForce = force1[0];
+        robot1[dataIndex].yForce = force1[1];
+        robot1[dataIndex].zForce = force1[2];
+    }
+ 
+    //Display Robot Data Every 2 Seconds
+    if(dataIndex%1000 == 0)
+    {
+        //Output Robot Data to Console
+        cout << "d_x: " << xRef << "d_y: " << yRef << "d_z :" << zRef << endl;
+    
+        cout << "Index: " << dataIndex << endl;
+        cout << "Position: " << pos1[0] << " " << pos1[1] << " " << pos1[2] << endl;
+        cout << "Force: " << force1[0] << " " <<  force1[1] << " " << force1[2] << endl;
+        cout << "Press 'q' to Stop" << endl;
+        if(dataIndex >= memLength){ 
+        cout << "NOT WRITING TO FILE PAST THIS POINT" << endl;
+        }
+        cout << endl;
+    }
+ 
+    dataIndex++;
+    return;
+}
